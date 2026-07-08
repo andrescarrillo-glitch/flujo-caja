@@ -185,9 +185,9 @@ td.left,td:first-child{text-align:left;font-weight:500}
   <polygon points="120,9 128,9 139,27 150,9 158,9 158,50 150,50 150,23 139,39 128,23 128,50 120,50" fill="#ffffff"/>
   <!-- A x=163..196 -->
   <polygon points="179,9 163,50 171,50 179,31 187,50 195,50" fill="#ffffff"/>
-  <!-- Orange squares -->
-  <rect x="200" y="9" width="11" height="11" fill="#D58500"/>
-  <rect x="213" y="9" width="11" height="11" fill="#D58500"/>
+  <!-- White squares (logo Ä) -->
+  <rect x="200" y="9" width="11" height="11" fill="#ffffff"/>
+  <rect x="213" y="9" width="11" height="11" fill="#ffffff"/>
   <!-- ARQUITECTOS -->
   <text x="130" y="62" font-family="Tahoma,sans-serif" font-size="7" fill="#ffffff" letter-spacing="4" text-anchor="middle">ARQUITECTOS</text>
 </svg><p style="font-size:10px;color:var(--txt2);margin-top:6px;letter-spacing:.05em">FLUJO DE CAJA · PROYECTOS</p></div>
@@ -356,9 +356,19 @@ td.left,td:first-child{text-align:left;font-weight:500}
   <div class="mhdr"><h3>Compartir Proyecto</h3><button class="btn bs bsm" onclick="closeM('m-share')">X</button></div>
   <div class="mbdy">
     <div class="al al-i">Copie este enlace para compartir el proyecto.</div>
-    <div style="display:flex;gap:7px;margin-bottom:10px">
+    <div style="display:flex;gap:7px;margin-bottom:6px">
       <input id="share-url" readonly style="flex:1;background:var(--bg3);border:1px solid var(--brd);color:var(--txt);padding:7px;border-radius:6px;font-size:11px">
-      <button class="btn bp bsm" onclick="copyURL()">Copiar</button>
+      <button class="btn bp bsm" onclick="copyURL()" id="btn-copy-long">Copiar</button>
+    </div>
+    <div style="margin-bottom:10px">
+      <button class="btn bs bsm" onclick="shortenURL()" id="btn-shorten" style="width:100%;margin-bottom:6px">&#9889; Acortar para WhatsApp</button>
+      <div id="short-result" style="display:none">
+        <div style="font-size:11px;color:var(--grn);margin-bottom:4px">&#10003; Link corto listo:</div>
+        <div style="display:flex;gap:7px">
+          <input id="short-url" readonly style="flex:1;background:var(--bg3);border:1px solid var(--brd);color:var(--txt);padding:7px;border-radius:6px;font-size:11px">
+          <button class="btn bp bsm" onclick="copyShortURL()" id="btn-copy-short">Copiar</button>
+        </div>
+      </div>
     </div>
     <div class="al al-w" style="font-size:11px">Para colaboracion real, exporte la plantilla Excel, enviela al director, y cargue los datos con "Cargar Datos".</div>
   </div>
@@ -2138,7 +2148,9 @@ function loadRealData(file){var st=document.getElementById('upl-st');var p=P.fin
 
 // Share
 function openShare(pid){var p=P.find(function(x){return x.id===pid;});if(!p)return;try{var enc=LZString.compressToEncodedURIComponent(JSON.stringify(p));document.getElementById('share-url').value=location.href.split('#')[0]+'#proj2='+enc;openM('m-share');}catch(e){alert('Proyecto muy grande para URL. Use Excel.');}}
-function copyURL(){var url=document.getElementById('share-url').value;navigator.clipboard.writeText(url).then(function(){var b=document.querySelector('#m-share .bp');if(b){b.textContent='Copiado!';setTimeout(function(){b.textContent='Copiar';},2000);}});}
+function copyURL(){var url=document.getElementById('share-url').value;navigator.clipboard.writeText(url).then(function(){var b=document.getElementById('btn-copy-long');if(b){b.textContent='Copiado!';setTimeout(function(){b.textContent='Copiar';},2000);}});}
+function shortenURL(){var btn=document.getElementById('btn-shorten');var longUrl=document.getElementById('share-url').value;if(!longUrl)return;btn.textContent='Acortando...';btn.disabled=true;fetch('https://is.gd/create.php?format=json&url='+encodeURIComponent(longUrl)).then(function(r){return r.json();}).then(function(d){var short=d.shorturl;if(short){document.getElementById('short-url').value=short;document.getElementById('short-result').style.display='block';btn.textContent='✓ Acortado';} else{btn.textContent='Error - intente de nuevo';btn.disabled=false;}}).catch(function(){btn.textContent='Error - intente de nuevo';btn.disabled=false;});}
+function copyShortURL(){var url=document.getElementById('short-url').value;navigator.clipboard.writeText(url).then(function(){var b=document.getElementById('btn-copy-short');if(b){b.textContent='Copiado!';setTimeout(function(){b.textContent='Copiar';},2000);}}).catch(function(){document.getElementById('short-url').select();document.execCommand('copy');});}
 function importURL(){var url=prompt('Pegue el enlace:');if(!url)return;var hash=url.includes('#')?'#'+url.split('#')[1]:'';if(!hash.startsWith('#proj2=')&&!hash.startsWith('#proj=')){alert('Enlace invalido');return;}try{var proj=_decodeProj(hash);if(!proj)throw new Error('Datos invalidos');var ex=P.find(function(x){return x.id===proj.id;});if(ex){if(confirm('Ya existe. Actualizar?'))Object.assign(ex,proj);}else P.push(proj);save();renderSB();showView('project',proj.id);}catch(e){alert('Error: '+e.message);}}
 function _decodeProj(hash){
   var proj=null;
@@ -2154,7 +2166,7 @@ function loadFromURL(){
   if(!h.startsWith('#proj2=')&&!h.startsWith('#proj='))return false;
   try{
     var proj=_decodeProj(h);
-    if(!proj)return false;
+    if(!proj)throw new Error('Enlace incompleto o corrupto');
     proj.capitulos=proj.capitulos||[];
     proj.capitulosIva=proj.capitulosIva||[];
     proj.months=proj.months||[];
@@ -2166,7 +2178,14 @@ function loadFromURL(){
     var b=document.getElementById('shared-banner');
     if(b){b.style.display='block';b.textContent='Vista Compartida — '+proj.name;}
     return true;
-  }catch(e){return false;}
+  }catch(e){
+    window._loadError=true;
+    document.addEventListener('DOMContentLoaded',function(){
+      var app=document.getElementById('app');
+      if(app)app.innerHTML='<div style="display:flex;align-items:center;justify-content:center;width:100%;height:80vh"><div style="text-align:center;padding:30px;max-width:360px"><div style="font-size:36px;margin-bottom:12px">⚠️</div><h2 style="color:#D58500;margin-bottom:8px">Enlace incompleto</h2><p style="color:#888;font-size:13px;margin-bottom:16px">El enlace fue cortado al enviarlo por WhatsApp. Pida al remitente que use el botón <b>Acortar para WhatsApp</b> y envíe el link corto.</p></div></div>';
+    });
+    return false;
+  }
 }
 function toggleSB(){
   var sb=document.getElementById('sidebar');
